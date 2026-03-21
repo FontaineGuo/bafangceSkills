@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv skills/prepare-market-data.md prepare-market-data/SKILL.md)",
+      "Bash(mv scripts/market_data_prep.py prepare-market-data/script.py)",
+      "Bash(mv skills/fetch-asset-prices.md fetch-asset-prices/SKILL.md)",
+      "Bash(mv scripts/price_fetcher.py fetch-asset-prices/script.py)",
+      "Bash(mv skills/generate-daily-report.md generate-daily-report/SKILL.md)",
+      "Bash(mv scripts/report_generator.py generate-daily-report/script.py)",
+      "Bash(uv pip:*)",
+      "Bash(uv run:*)",
+      "Bash(grep -E \"\\\\.csv$|\\\\.txt$\")",
+      "Bash(rm -rf stockCN.csv fundCN.csv etfCN.csv portfolio_with_prices.csv)",
+      "Bash(mkdir -p report)",
+      "Bash(mv daily_report.csv report/)",
+      "Bash(mv daily_report.txt report/)",
+      "Bash(python ../fetch-asset-prices/script.py portfolio.csv portfolio_with_prices.csv)",
+      "Bash(curl -s \"https://api.biyingapi.com/fd/real/time/003376/0B0E82D699F74946963AB28BBC84F6A0\")",
+      "Bash(python -c \":*)",
+      "Bash(curl -s \"https://fund.eastmoney.com/003376.html\" -H \"User-Agent: Mozilla/5.0\")",
+      "Bash(python ../generate-daily-report/script.py portfolio_with_prices.csv --allocation=asset_allocation.csv --output=report/daily_report.csv)"
+    ],
+    "additionalDirectories": [
+      "f:\\GitRepos\\bafangceSkills"
+    ]
+  }
+}
