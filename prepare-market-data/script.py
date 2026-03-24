@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pandas",
+#   "requests",
+# ]
+# ///
 """
 基础数据准备脚本
 获取股票列表和基金列表并缓存到本地 CSV 文件
@@ -190,11 +197,14 @@ def main():
     print(f"🔑 API License: {license_key[:8]}...")
     print()
 
+    # 确保输出目录存在
+    Path("assetBasicInfo").mkdir(exist_ok=True)
+
     results = {"stock": False, "etf": False, "fund": False}
 
     # 处理股票列表
     if data_types in ["stocks", "all"]:
-        stock_file = "stockCN.csv"
+        stock_file = "assetBasicInfo/stockCN.csv"
 
         if check_file_exists(stock_file) and not force_refresh:
             print(f"⏭️  股票列表已存在，跳过获取 ({stock_file})")
@@ -207,8 +217,8 @@ def main():
 
     # 处理基金列表（ETF 和开放式基金）
     if data_types in ["funds", "all"]:
-        etf_file = "etfCN.csv"
-        fund_file = "fundCN.csv"
+        etf_file = "assetBasicInfo/etfCN.csv"
+        fund_file = "assetBasicInfo/fundCN.csv"
 
         if check_file_exists(etf_file) and check_file_exists(fund_file) and not force_refresh:
             print(f"⏭️  基金列表已存在，跳过获取 ({etf_file}, {fund_file})")
@@ -228,17 +238,17 @@ def main():
     print("=" * 60)
 
     if results["stock"]:
-        print("✓ 股票列表: stockCN.csv")
+        print("✓ 股票列表: assetBasicInfo/stockCN.csv")
     else:
         print("✗ 股票列表: 获取失败")
 
     if results["etf"]:
-        print("✓ ETF列表: etfCN.csv")
+        print("✓ ETF列表: assetBasicInfo/etfCN.csv")
     else:
         print("✗ ETF列表: 获取失败")
 
     if results["fund"]:
-        print("✓ 开放式基金列表: fundCN.csv")
+        print("✓ 开放式基金列表: assetBasicInfo/fundCN.csv")
     else:
         print("✗ 开放式基金列表: 获取失败")
 

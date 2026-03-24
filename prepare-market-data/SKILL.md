@@ -1,14 +1,7 @@
 ---
 name: prepare-market-data
-description: 获取并缓存A股股票列表和基金列表（ETF/开放式基金）的基础信息。首次使用或每日更新时调用。
-trigger: "更新基础数据" | "获取股票列表" | "获取基金列表" | "更新市场数据" | "prepare market"
-arguments:
-  data_types:
-    description: "需要更新的数据类型：stocks（股票）、funds（基金）、all（全部，默认）"
-    required: false
-  force_refresh:
-    description: "是否强制刷新缓存（默认：false，如有缓存则跳过）"
-    required: false
+description: 获取并缓存A股股票列表和基金列表（ETF/开放式基金）的基础信息。首次使用或每日更新时调用。当用户说"更新基础数据"、"获取股票列表"、"获取基金列表"、"更新市场数据"或"prepare market"时触发。支持通过自然语言指定数据类型（stocks/funds/all）和是否强制刷新缓存。
+argument-hint: "[stocks|funds|all] [force_refresh]"
 ---
 
 # 基础数据准备
@@ -26,10 +19,10 @@ arguments:
 
 ### 1. 环境检查
 
-1. **检查 Python 环境**
-   - 确认系统已安装 Python 3.x
-   - 检查必要的库：pandas, requests
-   - 如缺少库，提示用户安装：`pip install pandas requests`
+1. **运行环境**
+   - 使用 `uv run ${CLAUDE_SKILL_DIR}/script.py` 执行脚本
+   - `uv` 会根据 script.py 头部的 inline metadata 自动创建隔离虚拟环境并安装依赖（pandas、requests），无需手动安装
+   - 如未安装 `uv`，提示用户执行 `brew install uv`
 
 2. **读取 API License**
    - 检查当前工作目录下是否存在 `api_key.txt` 文件
@@ -38,13 +31,13 @@ arguments:
 
 ### 2. 数据获取
 
-根据 `data_types` 参数决定获取哪些数据：
+根据 `$0` 参数决定获取哪些数据（默认：`all`）：
 
-#### 获取股票列表（如果 data_types 为 stocks 或 all）
+#### 获取股票列表（如果 $0 为 stocks 或 all）
 
 1. **检查缓存**
    - 判断 `stockCN.csv` 是否存在
-   - 如果存在且 `force_refresh=false`，跳过获取
+   - 如果存在且 `$1`（force_refresh）不为 true，跳过获取
 
 2. **调用 API**
    - API: `https://api.biyingapi.com/hslt/list/{license}`
@@ -64,11 +57,11 @@ arguments:
    - 显示获取的股票数量
    - 显示保存路径
 
-#### 获取基金列表（如果 data_types 为 funds 或 all）
+#### 获取基金列表（如果 $0 为 funds 或 all）
 
 1. **检查缓存**
    - 判断 `fundCN.csv` 是否存在
-   - 如果存在且 `force_refresh=false`，跳过获取
+   - 如果存在且 `$1`（force_refresh）不为 true，跳过获取
 
 2. **调用 API**
    - ETF列表 API: `https://api.biyingapi.com/fd/list/etf/{license}`

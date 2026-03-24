@@ -1,14 +1,7 @@
 ---
 name: fetch-asset-prices
-description: 读取投资组合CSV文件，批量获取资产的最新价格，计算成本、市值、盈亏等指标
-trigger: "获取资产价格" | "更新持仓价格" | "计算盈亏" | "查询持仓市值" | "fetch prices"
-arguments:
-  portfolio_file:
-    description: "投资组合CSV文件路径（默认: portfolio.csv）"
-    required: false
-  output_file:
-    description: "输出文件路径（默认: portfolio_with_prices.csv）"
-    required: false
+description: 读取投资组合CSV文件，批量获取资产的最新价格，计算成本、市值、盈亏等指标。当用户说"获取资产价格"、"更新持仓价格"、"计算盈亏"、"查询持仓市值"、"获取我的持仓最新价格"或"fetch prices"时触发。
+argument-hint: "[portfolio_file] [output_file]"
 ---
 
 # 获取资产价格
@@ -40,8 +33,10 @@ arguments:
 
 ### 1. 环境检查
 
-1. **检查 Python 环境**
-   - 确认已安装 pandas, requests, beautifulsoup4
+1. **运行环境**
+   - 使用 `uv run ${CLAUDE_SKILL_DIR}/script.py` 执行脚本
+   - `uv` 会根据 script.py 头部的 inline metadata 自动创建隔离虚拟环境并安装依赖（pandas、requests、beautifulsoup4），无需手动安装
+   - 如未安装 `uv`，提示用户执行 `brew install uv`
 
 2. **检查依赖文件**
    - 检查 `stockCN.csv` 和 `fundCN.csv` 是否存在
@@ -50,8 +45,9 @@ arguments:
 
 ### 2. 读取投资组合
 
-1. **读取 portfolio.csv**
-   - 文件路径由 `portfolio_file` 参数指定，默认 `portfolio.csv`
+1. **读取投资组合文件**
+   - 文件路径：`$0`（默认：`portfolio.csv`）
+   - 输出文件路径：`$1`（默认：`portfolio_with_prices.csv`）
    - 如文件不存在，停止执行并提示用户创建该文件
    - 检查必需列：Code, Quantity, Cost, AssetCategory, AssetType
 
@@ -110,7 +106,7 @@ arguments:
 ### 7. 保存结果
 
 1. **输出到 CSV**
-   - 文件名由 `output_file` 参数指定，默认 `portfolio_with_prices.csv`
+   - 文件名：`$1`（默认：`portfolio_with_prices.csv`）
    - 列：
      - Code, Name, Exchange, AssetCategory, AssetType
      - Quantity, Cost, CurrentPrice

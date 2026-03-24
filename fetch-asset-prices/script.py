@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pandas",
+#   "requests",
+#   "beautifulsoup4",
+# ]
+# ///
 """
 资产价格获取脚本
 读取投资组合，批量获取最新价格并计算财务指标
@@ -40,7 +48,7 @@ def load_reference_data():
     etf_map = {}    # ETF 单独的映射表
 
     # 加载股票列表
-    stock_file = Path("stockCN.csv")
+    stock_file = Path("assetBasicInfo/stockCN.csv")
     if stock_file.exists():
         try:
             df_stock = pd.read_csv(stock_file, encoding='utf-8-sig', dtype={'Code': str})
@@ -50,10 +58,10 @@ def load_reference_data():
         except Exception as e:
             print(f"⚠️  加载股票列表失败: {e}")
     else:
-        print("⚠️  警告：stockCN.csv 不存在，请先运行 prepare-market-data")
+        print("⚠️  警告：assetBasicInfo/stockCN.csv 不存在，请先运行 prepare-market-data")
 
     # 加载ETF列表
-    etf_file = Path("etfCN.csv")
+    etf_file = Path("assetBasicInfo/etfCN.csv")
     if etf_file.exists():
         try:
             df_etf = pd.read_csv(etf_file, encoding='utf-8-sig', dtype={'Code': str})
@@ -63,10 +71,10 @@ def load_reference_data():
         except Exception as e:
             print(f"⚠️  加载ETF列表失败: {e}")
     else:
-        print("⚠️  警告：etfCN.csv 不存在，请先运行 prepare-market-data")
+        print("⚠️  警告：assetBasicInfo/etfCN.csv 不存在，请先运行 prepare-market-data")
 
     # 加载开放式基金列表
-    fund_file = Path("fundCN.csv")
+    fund_file = Path("assetBasicInfo/fundCN.csv")
     if fund_file.exists():
         try:
             df_fund = pd.read_csv(fund_file, encoding='utf-8-sig', dtype={'Code': str})
@@ -76,7 +84,7 @@ def load_reference_data():
         except Exception as e:
             print(f"⚠️  加载开放式基金列表失败: {e}")
     else:
-        print("⚠️  警告：fundCN.csv 不存在，请先运行 prepare-market-data")
+        print("⚠️  警告：assetBasicInfo/fundCN.csv 不存在，请先运行 prepare-market-data")
 
     return stock_map, fund_map, etf_map
 
@@ -419,7 +427,6 @@ def main():
     )
 
     df_portfolio['Name'] = [info[0] for info in asset_info]
-    df_portfolio['Exchange'] = [info[1] for info in asset_info]
 
     # 计算财务指标
     print("🧮 正在计算财务指标...")
@@ -432,7 +439,7 @@ def main():
 
     # 重新排列列
     columns_order = [
-        'Code', 'Name', 'Exchange', 'AssetCategory', 'AssetType',
+        'Code', 'Name', 'AssetCategory', 'AssetType',
         'Quantity', 'Cost', 'CurrentPrice',
         'TotalCost', 'MarketValue', 'ProfitLoss', 'ProfitLossPct'
     ]
@@ -449,6 +456,28 @@ def main():
     except Exception as e:
         print(f"❌ 保存文件失败: {e}")
         sys.exit(1)
+
+    # 回写 Name 到 portfolio.csv（仅补填空值，不覆盖已有内容）
+    try:
+        df_source = pd.read_csv(portfolio_file, encoding='utf-8-sig', dtype={'Code': str})
+
+        if 'Name' in df_source.columns:
+            # 只回写有效名称（排除 '未知' 和空值）
+            name_lookup = {
+                code: name for code, name in zip(df_portfolio['Code'], df_portfolio['Name'])
+                if name and str(name).strip() not in ('', '未知')
+            }
+            blank_mask = df_source['Name'].isna() | (df_source['Name'].astype(str).str.strip() == '')
+            writable_mask = blank_mask & df_source['Code'].isin(name_lookup)
+            if writable_mask.any():
+                df_source['Name'] = df_source['Name'].astype(object)
+                df_source.loc[writable_mask, 'Name'] = df_source.loc[writable_mask, 'Code'].map(name_lookup)
+                df_source.to_csv(portfolio_file, index=False, encoding='utf-8-sig')
+                written = writable_mask.sum()
+                skipped = blank_mask.sum() - written
+                print(f"✓ 已回写 Name 到 {portfolio_file}（写入 {written} 条，跳过 {skipped} 条未解析）")
+    except Exception as e:
+        print(f"⚠️  回写 {portfolio_file} 失败（不影响主要结果）: {e}")
 
     # 输出摘要
     print()

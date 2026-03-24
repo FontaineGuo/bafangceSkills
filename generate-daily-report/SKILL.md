@@ -1,17 +1,7 @@
 ---
 name: generate-daily-report
-description: 根据持仓数据和资产配置目标，生成完整的日度投资报表，包含配置偏离度分析和警告
-trigger: "生成资产报表" | "生成日报" | "投资组合分析" | "资产配置分析" | "generate report"
-arguments:
-  portfolio_file:
-    description: "带价格的投资组合文件路径（默认: portfolio_with_prices.csv）"
-    required: false
-  allocation_file:
-    description: "资产配置目标CSV文件路径（默认: asset_allocation.csv）"
-    required: false
-  output_file:
-    description: "输出报表文件路径（默认: daily_report.csv）"
-    required: false
+description: 根据持仓数据和资产配置目标，生成完整的日度投资报表，包含配置偏离度分析和警告。当用户说"生成资产报表"、"生成日报"、"投资组合分析"、"资产配置分析"或"generate report"时触发。
+argument-hint: "[portfolio_file] [allocation_file] [output_file]"
 ---
 
 # 生成日度资产报表
@@ -41,8 +31,10 @@ arguments:
 
 ### 1. 环境检查
 
-1. **检查 Python 环境**
-   - 确认已安装 pandas
+1. **运行环境**
+   - 使用 `uv run ${CLAUDE_SKILL_DIR}/script.py` 执行脚本
+   - `uv` 会根据 script.py 头部的 inline metadata 自动创建隔离虚拟环境并安装依赖（pandas），无需手动安装
+   - 如未安装 `uv`，提示用户执行 `brew install uv`
 
 2. **检查输入文件**
    - 检查 `portfolio_with_prices.csv` 是否存在
@@ -53,11 +45,11 @@ arguments:
 ### 2. 读取数据
 
 1. **读取投资组合**
-   - 文件路径由 `portfolio_file` 参数指定，默认 `portfolio_with_prices.csv`
+   - 文件路径：`$0`（默认：`portfolio_with_prices.csv`）
    - 检查必需列：Code, Name, Exchange, AssetCategory, AssetType, Quantity, Cost, CurrentPrice, TotalCost, MarketValue, ProfitLoss, ProfitLossPct
 
 2. **读取资产配置**
-   - 文件路径由 `allocation_file` 参数指定，默认 `asset_allocation.csv`
+   - 文件路径：`$1`（默认：`asset_allocation.csv`）
    - 检查必需列：AssetType, Allocation, Bias
 
 ### 3. 计算汇总指标
@@ -139,7 +131,7 @@ ETF          30.0%      30.0%      0.0%     ✓
 ### 6. 保存报表
 
 1. **保存 CSV 报表**
-   - 文件名由 `output_file` 参数指定，默认 `daily_report.csv`
+   - 文件名：`$2`（默认：`daily_report.csv`）
    - 包含资产明细、配置分析和汇总信息
    - 使用 utf-8-sig 编码
 

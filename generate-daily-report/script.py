@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "pandas",
+# ]
+# ///
 """
 日度报表生成脚本
 根据持仓数据和资产配置目标生成完整的日度报表
@@ -250,6 +256,109 @@ def save_text_report(df_portfolio, analysis, summary, warnings, output_file):
         return False
 
 
+def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
+    """保存 HTML 格式报表"""
+    template_path = Path(__file__).parent / "report_template.html"
+
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+    except Exception as e:
+        print(f"❌ 读取 HTML 模板失败: {e}")
+        return False
+
+    try:
+        # ── 资产明细行 ──
+        asset_rows = []
+        for _, row in df_portfolio.iterrows():
+            pl = row.get('ProfitLoss', 0)
+            pl_pct = row.get('ProfitLossPct', 0)
+            cls = 'profit' if pl >= 0 else 'loss'
+            sign = '+' if pl >= 0 else ''
+            asset_rows.append(f"""
+          <tr>
+            <td class="code">{row.get('Code', '')}</td>
+            <td>{row.get('Name', '未知')}</td>
+            <td><span class="tag">{row.get('AssetType', '')}</span></td>
+            <td>{row.get('Quantity', 0):,.0f}</td>
+            <td>¥{row.get('Cost', 0):.3f}</td>
+            <td>¥{row.get('CurrentPrice', 0):.3f}</td>
+            <td>¥{row.get('MarketValue', 0):,.2f}</td>
+            <td class="{cls}">{sign}¥{pl:,.2f}</td>
+            <td class="{cls}">{sign}{pl_pct:.2f}%</td>
+          </tr>""")
+
+        # ── 配置分析行 ──
+        alloc_rows = []
+        for _, row in analysis.iterrows():
+            actual = row['ActualAllocation']
+            target = row['Allocation']
+            bias = row['Bias']
+            is_warn = row['Status'] == '⚠️ 超出偏差'
+
+            low  = max(0.0, target - bias)
+            high = min(100.0, target + bias)
+            fill_cls = 'over-high' if actual > high else ('over-low' if actual < low else '')
+
+            alloc_rows.append(f"""
+          <tr>
+            <td class="alloc-name">{row['AssetType']}</td>
+            <td class="alloc-bar-cell">
+              <div class="bar-track">
+                <div class="bar-fill {fill_cls}" style="width:{min(actual,100):.1f}%"></div>
+                <div class="bar-target" style="left:{low:.1f}%;width:{high-low:.1f}%"></div>
+              </div>
+            </td>
+            <td class="alloc-nums">{actual:.1f}% / {target:.1f}%±{bias:.1f}%</td>
+            <td class="alloc-status">
+              {'<span class="badge-warn">⚠ 超偏差</span>' if is_warn else '<span class="badge-ok">✓</span>'}
+            </td>
+          </tr>""")
+
+        # ── 警告区块 ──
+        if warnings:
+            items = '\n'.join(f'<li>{w.lstrip("• ")}</li>' for w in warnings)
+            warnings_html = f"""
+  <section>
+    <div class="warning-list">
+      <div class="w-title">⚠ 配置警告（{len(warnings)} 项）</div>
+      <ul>{items}</ul>
+    </div>
+  </section>"""
+            warning_badge = f'⚠ {len(warnings)} 项配置警告'
+        else:
+            warnings_html = ''
+            warning_badge = '✓ 配置均在目标范围内'
+
+        pl_total = summary['total_profit_loss']
+        pl_cls  = 'profit' if pl_total >= 0 else 'loss'
+        pl_sign = '+' if pl_total >= 0 else ''
+
+        html = (html
+            .replace('{{REPORT_DATE}}',        datetime.now().strftime('%Y-%m-%d'))
+            .replace('{{TOTAL_COST}}',         f"{summary['total_cost']:,.2f}")
+            .replace('{{TOTAL_MARKET_VALUE}}', f"{summary['total_market_value']:,.2f}")
+            .replace('{{TOTAL_PROFIT_LOSS}}',  f"{abs(pl_total):,.2f}")
+            .replace('{{TOTAL_RETURN_PCT}}',   f"{abs(summary['total_profit_loss_pct']):.2f}")
+            .replace('{{PROFIT_LOSS_CLASS}}',  pl_cls)
+            .replace('{{PROFIT_SIGN}}',        pl_sign)
+            .replace('{{ASSET_TABLE_ROWS}}',   '\n'.join(asset_rows))
+            .replace('{{ALLOCATION_ROWS}}',    '\n'.join(alloc_rows))
+            .replace('{{WARNINGS_HTML}}',      warnings_html)
+            .replace('{{WARNING_COUNT_BADGE}}', warning_badge)
+        )
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        print(f"✓ 已保存 HTML 报表: {output_file}")
+        return True
+
+    except Exception as e:
+        print(f"❌ 保存 HTML 报表失败: {e}")
+        return False
+
+
 def main():
     """主函数"""
     print("=" * 60)
@@ -260,8 +369,9 @@ def main():
     # 解析参数
     portfolio_file = "portfolio_with_prices.csv"
     allocation_file = "asset_allocation.csv"
-    output_csv = "daily_report.csv"
-    output_txt = "daily_report.txt"
+    output_csv = "report/daily_report.csv"
+    output_txt = "report/daily_report.txt"
+    output_html = "report/daily_report.html"
 
     if len(sys.argv) > 1:
         for i, arg in enumerate(sys.argv[1:]):
@@ -272,10 +382,11 @@ def main():
             elif arg.startswith('--output='):
                 output_csv = arg.split('=')[1]
                 output_txt = output_csv.replace('.csv', '.txt')
+                output_html = output_csv.replace('.csv', '.html')
 
     print(f"📂 投资组合: {portfolio_file}")
     print(f"📂 资产配置: {allocation_file}")
-    print(f"📂 输出文件: {output_csv}, {output_txt}")
+    print(f"📂 输出文件: {output_csv}, {output_txt}, {output_html}")
     print()
 
     # 加载数据
@@ -304,8 +415,10 @@ def main():
     print()
     print("💾 正在生成报表...")
 
-    csv_ok = save_csv_report(df_portfolio, analysis, summary, output_csv)
-    txt_ok = save_text_report(df_portfolio, analysis, summary, warnings, output_txt)
+    Path(output_csv).parent.mkdir(parents=True, exist_ok=True)
+    csv_ok  = save_csv_report(df_portfolio, analysis, summary, output_csv)
+    txt_ok  = save_text_report(df_portfolio, analysis, summary, warnings, output_txt)
+    html_ok = save_html_report(df_portfolio, analysis, summary, warnings, output_html)
 
     # 输出摘要
     print()
@@ -330,7 +443,7 @@ def main():
 
     print()
 
-    if csv_ok and txt_ok:
+    if csv_ok and txt_ok and html_ok:
         print("✓ 报表生成成功")
     else:
         print("✗ 部分报表生成失败")
