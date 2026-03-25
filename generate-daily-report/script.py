@@ -332,7 +332,7 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
 
         pl_total = summary['total_profit_loss']
         pl_cls  = 'profit' if pl_total >= 0 else 'loss'
-        pl_sign = '+' if pl_total >= 0 else ''
+        pl_sign = '+' if pl_total >= 0 else '-'
 
         html = (html
             .replace('{{REPORT_DATE}}',        datetime.now().strftime('%Y-%m-%d'))
