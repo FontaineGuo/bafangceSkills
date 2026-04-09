@@ -16,7 +16,7 @@ argument-hint: "[portfolio_file] [output_file]"
   - `Code` - 资产代码
   - `Quantity` - 持仓数量
   - `Cost` - 成本价
-  - `AssetCategory` - 资产类别（股票/基金）
+  - `AssetCategory` - 资产类别（股票/基金/现金）
   - `AssetType` - 资产类型（如：A股股票、ETF、开放式基金等）
 
 ### 依赖文件
@@ -75,6 +75,7 @@ argument-hint: "[portfolio_file] [output_file]"
    - 根据 AssetCategory 判断调用哪个 API：
      - 股票：`https://api.biyingapi.com/hsstock/real/time/{code}/{license}`
      - 基金：`https://api.biyingapi.com/fd/real/time/{code}/{license}`
+     - **现金**：不调用 API，价格固定为成本价（即 1），无需获取行情
    - 提取返回数据中的 `p` 字段（最新价）
    - **API 失败时的备用方案**：
      - 对于基金，如果 API 调用失败，自动尝试从天天基金网爬取净值
@@ -93,8 +94,8 @@ argument-hint: "[portfolio_file] [output_file]"
 - **当前市值** = Quantity × 最新价
 - **盈亏金额** = 当前市值 - 成本总价
 - **盈亏百分比** = (盈亏金额 / 成本总价) × 100%
-- **资产名称** = 从 stockCN.csv 或 fundCN.csv 匹配
-- **交易所** = 从 stockCN.csv 或 fundCN.csv 匹配
+- **资产名称** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"现金"）
+- **交易所** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"—"）
 
 ### 6. 匹配资产信息
 

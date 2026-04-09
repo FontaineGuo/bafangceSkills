@@ -243,6 +243,10 @@ def match_asset_info(code, asset_category, stock_map, fund_map, etf_map=None, sc
     if scraped_names is None:
         scraped_names = {}
 
+    # 现金类资产直接返回固定信息
+    if asset_category == '现金':
+        return ("现金", "—")
+
     # 对于基金，优先使用爬虫获取的名称
     if asset_category == '基金' and code in scraped_names:
         fund_name = scraped_names[code]
@@ -384,13 +388,21 @@ def main():
             price, fund_name, source = get_fund_price(code, license_key)
             if fund_name and source == 'scraper':
                 scraped_names[code] = fund_name
+        elif category == '现金':
+            price = float(row['Cost'])
+            source = 'cash'
+            fund_name = None
+            print(f"✓ ¥{price:.2f} (现金)")
         else:
             price = None
             source = None
             fund_name = None
             print("✗ 未知类别")
 
-        if price is not None:
+        if source == 'cash':
+            # 现金已在上方打印日志，只追加价格
+            prices.append(price)
+        elif price is not None:
             source_str = "" if source == 'api' else f" ({source})"
             print(f"✓ ¥{price:.2f}{source_str}")
             prices.append(price)

@@ -14,6 +14,8 @@ argument-hint: "[portfolio_file] [allocation_file] [output_file]"
 - 资产配置比例分析
 - 配置偏离度警告
 
+**现金类资产特殊处理**：现金的盈亏和收益率列显示为 `—`，不计入盈亏统计。
+
 ### 输入文件
 
 - **portfolio_with_prices.csv** - 带价格的投资组合（由 fetch-asset-prices 生成）
@@ -59,6 +61,8 @@ argument-hint: "[portfolio_file] [allocation_file] [output_file]"
 - **总市值** = Σ(MarketValue)
 - **总盈亏** = 总市值 - 总成本
 - **总收益率** = (总盈亏 / 总成本) × 100%
+
+> 注意：现金类资产的成本价固定为 1，盈亏始终为 0，报表中盈亏列和收益率列显示为 `—`。
 
 ### 4. 计算资产配置比例
 

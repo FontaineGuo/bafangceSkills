@@ -43,3 +43,6 @@ Thumbs.db
 # API keys (security)
 *_key.txt
 *.key
+
+# test folder
+testdata/

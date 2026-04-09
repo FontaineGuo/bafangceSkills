@@ -209,13 +209,17 @@ def save_text_report(df_portfolio, analysis, summary, warnings, output_file):
                 market_value = row.get('MarketValue', 0)
                 profit_loss = row.get('ProfitLoss', 0)
                 profit_loss_pct = row.get('ProfitLossPct', 0)
-
-                profit_sign = '+' if profit_loss >= 0 else ''
-                profit_pct_sign = '+' if profit_loss_pct >= 0 else ''
+                is_cash = row.get('AssetCategory', '') == '现金'
 
                 f.write(f"{code:<10} {name:<14} {asset_type:<6} ")
                 f.write(f"{quantity:>6} {cost:>6.2f} {current_price:>6.2f} ")
-                f.write(f"{market_value:>10,.2f} {profit_sign}{profit_loss:>8.2f} {profit_pct_sign}{profit_loss_pct:>6.2f}%\n")
+                f.write(f"{market_value:>10,.2f} ")
+                if is_cash:
+                    f.write(f"{'—':>9} {'—':>8}\n")
+                else:
+                    profit_sign = '+' if profit_loss >= 0 else ''
+                    profit_pct_sign = '+' if profit_loss_pct >= 0 else ''
+                    f.write(f"{profit_sign}{profit_loss:>8.2f} {profit_pct_sign}{profit_loss_pct:>6.2f}%\n")
 
             # 配置分析
             f.write("\n📈 配置分析\n")
@@ -273,8 +277,16 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
         for _, row in df_portfolio.iterrows():
             pl = row.get('ProfitLoss', 0)
             pl_pct = row.get('ProfitLossPct', 0)
-            cls = 'profit' if pl >= 0 else 'loss'
-            sign = '+' if pl >= 0 else ''
+            is_cash = row.get('AssetCategory', '') == '现金'
+            if is_cash:
+                cls = 'neutral'
+                pl_display = '—'
+                pl_pct_display = '—'
+            else:
+                cls = 'profit' if pl >= 0 else 'loss'
+                sign = '+' if pl >= 0 else ''
+                pl_display = f'{sign}¥{pl:,.2f}'
+                pl_pct_display = f'{sign}{pl_pct:.2f}%'
             asset_rows.append(f"""
           <tr>
             <td class="code">{row.get('Code', '')}</td>
@@ -284,8 +296,8 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
             <td>¥{row.get('Cost', 0):.3f}</td>
             <td>¥{row.get('CurrentPrice', 0):.3f}</td>
             <td>¥{row.get('MarketValue', 0):,.2f}</td>
-            <td class="{cls}">{sign}¥{pl:,.2f}</td>
-            <td class="{cls}">{sign}{pl_pct:.2f}%</td>
+            <td class="{cls}">{pl_display}</td>
+            <td class="{cls}">{pl_pct_display}</td>
           </tr>""")
 
         # ── 配置分析行 ──
