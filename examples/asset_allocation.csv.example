@@ -1,4 +1,5 @@
 AssetType,Allocation,Bias
-股票,60,5
+股票,50,5
 ETF,30,5
 开放式基金,10,3
+货币基金,10,5

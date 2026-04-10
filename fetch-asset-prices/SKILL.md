@@ -14,10 +14,11 @@ argument-hint: "[portfolio_file] [output_file]"
 
 - **portfolio.csv** - 投资组合，包含列：
   - `Code` - 资产代码
-  - `Quantity` - 持仓数量
-  - `Cost` - 成本价
-  - `AssetCategory` - 资产类别（股票/基金/现金）
-  - `AssetType` - 资产类型（如：A股股票、ETF、开放式基金等）
+  - `Quantity` - 持仓数量（货币基金由用户手动维护，反映份额累计变化）
+  - `Cost` - 成本价（货币基金固定为 1.0）
+  - `AssetCategory` - 资产类别（股票/基金/货币基金/现金）
+  - `AssetType` - 资产类型（如：A股股票、ETF、开放式基金、货币基金等）
+  - `TotalInvestment` - 投资本金（仅货币基金填写，其余留空）
 
 ### 依赖文件
 
@@ -50,6 +51,7 @@ argument-hint: "[portfolio_file] [output_file]"
    - 输出文件路径：`$1`（默认：`portfolio_with_prices.csv`）
    - 如文件不存在，停止执行并提示用户创建该文件
    - 检查必需列：Code, Quantity, Cost, AssetCategory, AssetType
+   - `TotalInvestment` 列可选，货币基金行必须有值
 
 2. **数据验证**
    - 确认数据不为空
@@ -76,9 +78,14 @@ argument-hint: "[portfolio_file] [output_file]"
      - 股票：`https://api.biyingapi.com/hsstock/real/time/{code}/{license}`
      - 基金：`https://api.biyingapi.com/fd/real/time/{code}/{license}`
      - **现金**：不调用 API，价格固定为成本价（即 1），无需获取行情
+     - **货币基金**：不调用 API，`CurrentPrice` 固定为 `1.0`；通过爬虫获取名称和七日年化
    - 提取返回数据中的 `p` 字段（最新价）
+   - **货币基金爬虫**：
+     - 爬虫 URL：`https://fund.eastmoney.com/{code}.html`
+     - 提取字段：基金名称（`Name`）、七日年化收益率（`SevenDayYield`，如 `2.15%`）
+     - 若爬取失败，`Name` 标记为 "未知"，`SevenDayYield` 标记为 `—`
    - **API 失败时的备用方案**：
-     - 对于基金，如果 API 调用失败，自动尝试从天天基金网爬取净值
+     - 对于普通基金，如果 API 调用失败，自动尝试从天天基金网爬取净值
      - 爬虫 URL：`https://fund.eastmoney.com/{code}.html`
      - 提取单位净值作为价格
 
@@ -92,17 +99,22 @@ argument-hint: "[portfolio_file] [output_file]"
 
 - **成本总价** = Quantity × Cost
 - **当前市值** = Quantity × 最新价
-- **盈亏金额** = 当前市值 - 成本总价
-- **盈亏百分比** = (盈亏金额 / 成本总价) × 100%
-- **资产名称** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"现金"）
-- **交易所** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"—"）
+- **盈亏金额**：
+  - 普通资产（股票/基金/现金）：`MarketValue - TotalCost`
+  - **货币基金**：`MarketValue - TotalInvestment`（用投资本金替代持仓成本）
+- **盈亏百分比**：
+  - 普通资产：`(盈亏金额 / TotalCost) × 100%`
+  - **货币基金**：`(盈亏金额 / TotalInvestment) × 100%`
+- **资产名称** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"现金"；货币基金从爬虫获取）
+- **交易所** = 从 stockCN.csv 或 fundCN.csv 匹配（现金类固定为"—"；货币基金固定为"—"）
 
 ### 6. 匹配资产信息
 
 对于每项资产：
 1. 根据 AssetCategory 确定从哪个列表查找
 2. 根据 Code 匹配资产名称和交易所
-3. 如匹配不到，标记为 "未知"
+3. **货币基金**：名称和七日年化均来自爬虫，不查 stockCN.csv / fundCN.csv
+4. 如匹配不到，标记为 "未知"
 
 ### 7. 保存结果
 
@@ -111,7 +123,8 @@ argument-hint: "[portfolio_file] [output_file]"
    - 列：
      - Code, Name, Exchange, AssetCategory, AssetType
      - Quantity, Cost, CurrentPrice
-     - TotalCost, MarketValue, ProfitLoss, ProfitLossPct
+     - TotalCost, MarketValue, TotalInvestment, ProfitLoss, ProfitLossPct
+     - SevenDayYield（非货币基金行留空）
 
 2. **编码格式**
    - 使用 utf-8-sig 编码（支持 Excel）
@@ -147,7 +160,7 @@ argument-hint: "[portfolio_file] [output_file]"
 
 ## 输出文件格式示例
 
-| Code | Name | Exchange | Quantity | Cost | CurrentPrice | TotalCost | MarketValue | ProfitLoss | ProfitLossPct |
-|------|------|----------|----------|------|--------------|-----------|-------------|------------|---------------|
-| 000001.SZ | 平安银行 | SZ | 1000 | 15.50 | 16.20 | 15500 | 16200 | 700 | 4.52% |
-| 159001 | 货币ETF易方达 | SZ | 5000 | 2.80 | 2.85 | 14000 | 14250 | 250 | 1.79% |
+| Code | Name | Exchange | AssetCategory | AssetType | Quantity | Cost | CurrentPrice | TotalCost | MarketValue | TotalInvestment | ProfitLoss | ProfitLossPct | SevenDayYield |
+|------|------|----------|---------------|-----------|----------|------|--------------|-----------|-------------|-----------------|------------|---------------|---------------|
+| 000001 | 平安银行 | SZ | 股票 | 中国股票ETF | 1000 | 15.50 | 16.20 | 15500 | 16200 | | 700 | 4.52% | |
+| 163820 | 中银货币 | — | 货币基金 | 货币基金 | 12000 | 1.00 | 1.00 | 12000 | 12000 | 11700 | 300 | 2.56% | 1.85% |

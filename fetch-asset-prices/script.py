@@ -134,6 +134,58 @@ def get_fund_price(code, license_key):
         return scrape_fund_price_from_eastmoney(clean_code)
 
 
+def scrape_mmf_info_from_eastmoney(code):
+    """从天天基金网爬取货币基金名称和七日年化，返回 (name, seven_day_yield) 或 (None, None)"""
+    url = f"https://fund.eastmoney.com/{code}.html"
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, timeout=15, headers=headers)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.content.decode('utf-8', errors='ignore'), 'html.parser')
+
+        # 提取基金名称
+        fund_name = None
+        title_tag = soup.find('title')
+        if title_tag:
+            title_text = title_tag.get_text().strip()
+            if '(' in title_text:
+                fund_name = title_text.split('(')[0].strip()
+            elif '（' in title_text:
+                fund_name = title_text.split('（')[0].strip()
+
+        # 提取七日年化收益率
+        seven_day_yield = None
+        # 货币基金页面七日年化通常在 data-target="SevenDays" 或特定 span 中
+        for span in soup.find_all('span'):
+            parent = span.find_parent()
+            if parent:
+                parent_text = parent.get_text()
+                if '七日年化' in parent_text:
+                    text = span.get_text().strip()
+                    if '%' in text or text.replace('.', '').replace('-', '').isdigit():
+                        seven_day_yield = text if '%' in text else f"{text}%"
+                        break
+
+        # 备用：查找页面中的年化数字区域
+        if not seven_day_yield:
+            for div in soup.find_all(['div', 'dl', 'p'], string=lambda t: t and '七日年化' in t):
+                sibling = div.find_next_sibling()
+                if sibling:
+                    text = sibling.get_text().strip()
+                    if text:
+                        seven_day_yield = text if '%' in text else f"{text}%"
+                        break
+
+        return fund_name, seven_day_yield
+
+    except Exception:
+        return None, None
+
+
 def scrape_fund_price_from_eastmoney(code):
     """从天天基金网爬取基金净值和名称，返回 (price, name, 'scraper') 或 (None, None, None)"""
     url = f"https://fund.eastmoney.com/{code}.html"
@@ -247,6 +299,10 @@ def match_asset_info(code, asset_category, stock_map, fund_map, etf_map=None, sc
     if asset_category == '现金':
         return ("现金", "—")
 
+    # 货币基金直接返回固定信息（名称由爬虫获取，此处只处理未爬到的情况）
+    if asset_category == '货币基金':
+        return ("未知", "—")
+
     # 对于基金，优先使用爬虫获取的名称
     if asset_category == '基金' and code in scraped_names:
         fund_name = scraped_names[code]
@@ -306,11 +362,23 @@ def calculate_metrics(row):
     quantity = row['Quantity']
     cost = row['Cost']
     current_price = row['CurrentPrice']
+    asset_type = row.get('AssetType', '')
 
     total_cost = quantity * cost
     market_value = quantity * current_price
-    profit_loss = market_value - total_cost
-    profit_loss_pct = (profit_loss / total_cost * 100) if total_cost > 0 else 0
+
+    # 货币基金：盈亏基于投资本金（TotalInvestment）而非持仓成本
+    if asset_type == '货币基金':
+        total_investment = row.get('TotalInvestment', None)
+        if pd.notna(total_investment) and float(total_investment) > 0:
+            profit_loss = market_value - float(total_investment)
+            profit_loss_pct = profit_loss / float(total_investment) * 100
+        else:
+            profit_loss = 0.0
+            profit_loss_pct = 0.0
+    else:
+        profit_loss = market_value - total_cost
+        profit_loss_pct = (profit_loss / total_cost * 100) if total_cost > 0 else 0
 
     return total_cost, market_value, profit_loss, profit_loss_pct
 
@@ -371,7 +439,8 @@ def main():
     fail_count = 0
 
     prices = []
-    scraped_names = {}  # 存储爬虫获取的基金名称 {code: name}
+    scraped_names = {}       # {code: name}（普通基金爬虫名称）
+    mmf_info = {}            # {code: (name, seven_day_yield)}（货币基金爬虫信息）
 
     for idx, row in df_portfolio.iterrows():
         # 确保 code 是字符串类型
@@ -388,6 +457,14 @@ def main():
             price, fund_name, source = get_fund_price(code, license_key)
             if fund_name and source == 'scraper':
                 scraped_names[code] = fund_name
+        elif category == '货币基金':
+            price = 1.0
+            source = 'mmf'
+            fund_name = None
+            clean_code = code.replace('.', '').replace('SH', '').replace('SZ', '')
+            mmf_name, seven_day_yield = scrape_mmf_info_from_eastmoney(clean_code)
+            mmf_info[code] = (mmf_name or '未知', seven_day_yield or '—')
+            print(f"✓ ¥1.0000 (货币基金, 七日年化: {mmf_info[code][1]})")
         elif category == '现金':
             price = float(row['Cost'])
             source = 'cash'
@@ -399,8 +476,8 @@ def main():
             fund_name = None
             print("✗ 未知类别")
 
-        if source == 'cash':
-            # 现金已在上方打印日志，只追加价格
+        if source in ('cash', 'mmf'):
+            # 现金和货币基金已在上方打印日志，只追加价格
             prices.append(price)
         elif price is not None:
             source_str = "" if source == 'api' else f" ({source})"
@@ -440,6 +517,11 @@ def main():
 
     df_portfolio['Name'] = [info[0] for info in asset_info]
 
+    # 货币基金：用爬虫名称覆盖
+    for code, (mmf_name, _) in mmf_info.items():
+        if mmf_name and mmf_name != '未知':
+            df_portfolio.loc[df_portfolio['Code'] == code, 'Name'] = mmf_name
+
     # 计算财务指标
     print("🧮 正在计算财务指标...")
 
@@ -449,11 +531,21 @@ def main():
     df_portfolio['ProfitLoss'] = [m[2] for m in metrics]
     df_portfolio['ProfitLossPct'] = [m[3] for m in metrics]
 
+    # 填充 TotalInvestment 列（货币基金从原始数据读取，其余为空）
+    if 'TotalInvestment' not in df_portfolio.columns:
+        df_portfolio['TotalInvestment'] = None
+
+    # 填充 SevenDayYield 列
+    df_portfolio['SevenDayYield'] = None
+    for code, (_, seven_day_yield) in mmf_info.items():
+        df_portfolio.loc[df_portfolio['Code'] == code, 'SevenDayYield'] = seven_day_yield
+
     # 重新排列列
     columns_order = [
         'Code', 'Name', 'AssetCategory', 'AssetType',
         'Quantity', 'Cost', 'CurrentPrice',
-        'TotalCost', 'MarketValue', 'ProfitLoss', 'ProfitLossPct'
+        'TotalCost', 'MarketValue', 'TotalInvestment', 'ProfitLoss', 'ProfitLossPct',
+        'SevenDayYield'
     ]
 
     # 只保留存在的列
@@ -497,7 +589,11 @@ def main():
     print("📋 持仓摘要")
     print("=" * 60)
 
-    total_cost = df_portfolio['TotalCost'].sum()
+    # 货币基金成本用 TotalInvestment，其余用 TotalCost
+    mmf_mask = df_portfolio['AssetType'] == '货币基金'
+    normal_cost = df_portfolio.loc[~mmf_mask, 'TotalCost'].sum()
+    mmf_cost = pd.to_numeric(df_portfolio.loc[mmf_mask, 'TotalInvestment'], errors='coerce').fillna(0).sum()
+    total_cost = normal_cost + mmf_cost
     total_market_value = df_portfolio['MarketValue'].sum()
     total_profit_loss = df_portfolio['ProfitLoss'].sum()
     total_profit_loss_pct = (total_profit_loss / total_cost * 100) if total_cost > 0 else 0

@@ -81,7 +81,14 @@ def load_allocation(allocation_file):
 
 def calculate_summary(df_portfolio):
     """计算汇总指标"""
-    total_cost = df_portfolio['TotalCost'].sum() if 'TotalCost' in df_portfolio.columns else 0
+    # 货币基金：成本用 TotalInvestment；其余用 TotalCost
+    mmf_mask = df_portfolio.get('AssetType', pd.Series(dtype=str)) == '货币基金'
+    normal_cost = df_portfolio.loc[~mmf_mask, 'TotalCost'].sum() if 'TotalCost' in df_portfolio.columns else 0
+    mmf_cost = 0
+    if mmf_mask.any() and 'TotalInvestment' in df_portfolio.columns:
+        mmf_cost = pd.to_numeric(df_portfolio.loc[mmf_mask, 'TotalInvestment'], errors='coerce').fillna(0).sum()
+    total_cost = normal_cost + mmf_cost
+
     total_market_value = df_portfolio['MarketValue'].sum()
     total_profit_loss = df_portfolio['ProfitLoss'].sum()
     total_profit_loss_pct = (total_profit_loss / total_cost * 100) if total_cost > 0 else 0
@@ -146,23 +153,29 @@ def generate_warnings(analysis):
 def save_csv_report(df_portfolio, analysis, summary, output_file):
     """保存 CSV 格式报表"""
     try:
-        # 资产明细
+        # 普通资产明细（排除货币基金）
+        mmf_mask = df_portfolio.get('AssetType', pd.Series(dtype=str)) == '货币基金'
+        df_normal = df_portfolio[~mmf_mask]
+        df_mmf = df_portfolio[mmf_mask]
+
         detail_cols = [
-            'Code', 'Name', 'Exchange', 'AssetCategory', 'AssetType',
+            'Code', 'Name', 'AssetCategory', 'AssetType',
             'Quantity', 'Cost', 'CurrentPrice',
             'TotalCost', 'MarketValue', 'ProfitLoss', 'ProfitLossPct'
         ]
-        detail_cols = [col for col in detail_cols if col in df_portfolio.columns]
-        df_detail = df_portfolio[detail_cols].copy()
+        detail_cols = [col for col in detail_cols if col in df_normal.columns]
 
-        # 添加合并行（用于配置分析）
-        # CSV 格式下，我们在后面添加配置分析部分
-
-        # 保存主报表
         with open(output_file, 'w', encoding='utf-8-sig') as f:
             # 写入资产明细
             f.write("=== 资产明细 ===\n")
-            df_detail.to_csv(f, index=False)
+            df_normal[detail_cols].to_csv(f, index=False)
+
+            # 写入货币基金节
+            if not df_mmf.empty:
+                f.write("\n\n=== 货币基金 ===\n")
+                mmf_cols = ['Code', 'Name', 'AssetType', 'Quantity', 'TotalInvestment', 'MarketValue', 'ProfitLoss', 'ProfitLossPct', 'SevenDayYield']
+                mmf_cols = [col for col in mmf_cols if col in df_mmf.columns]
+                df_mmf[mmf_cols].to_csv(f, index=False)
 
             f.write("\n\n=== 配置分析 ===\n")
             analysis_cols = ['AssetType', 'ActualAllocation', 'Allocation', 'Deviation', 'Bias', 'Status']
@@ -185,6 +198,10 @@ def save_csv_report(df_portfolio, analysis, summary, output_file):
 def save_text_report(df_portfolio, analysis, summary, warnings, output_file):
     """保存文本格式报表"""
     try:
+        mmf_mask = df_portfolio.get('AssetType', pd.Series(dtype=str)) == '货币基金'
+        df_normal = df_portfolio[~mmf_mask]
+        df_mmf = df_portfolio[mmf_mask]
+
         with open(output_file, 'w', encoding='utf-8') as f:
             # 标题
             f.write("=" * 40 + "\n")
@@ -192,14 +209,11 @@ def save_text_report(df_portfolio, analysis, summary, warnings, output_file):
             f.write(f"  日期：{datetime.now().strftime('%Y-%m-%d')}\n")
             f.write("=" * 40 + "\n\n")
 
-            # 资产明细
+            # 资产明细（排除货币基金）
             f.write("📊 资产明细\n")
             f.write("-" * 40 + "\n")
 
-            detail_cols = ['Code', 'Name', 'AssetType', 'Quantity', 'Cost', 'CurrentPrice', 'MarketValue', 'ProfitLoss', 'ProfitLossPct']
-            detail_cols = [col for col in detail_cols if col in df_portfolio.columns]
-
-            for _, row in df_portfolio.iterrows():
+            for _, row in df_normal.iterrows():
                 code = row.get('Code', 'N/A')
                 name = row.get('Name', 'N/A')
                 asset_type = row.get('AssetType', 'N/A')
@@ -220,6 +234,33 @@ def save_text_report(df_portfolio, analysis, summary, warnings, output_file):
                     profit_sign = '+' if profit_loss >= 0 else ''
                     profit_pct_sign = '+' if profit_loss_pct >= 0 else ''
                     f.write(f"{profit_sign}{profit_loss:>8.2f} {profit_pct_sign}{profit_loss_pct:>6.2f}%\n")
+
+            # 货币基金节
+            if not df_mmf.empty:
+                f.write("\n💰 货币基金\n")
+                f.write("-" * 40 + "\n")
+                f.write(f"{'代码':<10} {'名称':<14} {'份额':>8} {'投资本金':>12} {'当前市值':>12} {'累计收益':>10} {'收益率':>8} {'七日年化':>10}\n")
+
+                for _, row in df_mmf.iterrows():
+                    code = row.get('Code', 'N/A')
+                    name = row.get('Name', 'N/A')
+                    quantity = row.get('Quantity', 0)
+                    total_investment = row.get('TotalInvestment', 0)
+                    market_value = row.get('MarketValue', 0)
+                    profit_loss = row.get('ProfitLoss', 0)
+                    profit_loss_pct = row.get('ProfitLossPct', 0)
+                    seven_day_yield = row.get('SevenDayYield', '—') or '—'
+
+                    profit_sign = '+' if profit_loss >= 0 else ''
+                    profit_pct_sign = '+' if profit_loss_pct >= 0 else ''
+                    try:
+                        ti = f"¥{float(total_investment):,.2f}"
+                    except (TypeError, ValueError):
+                        ti = '—'
+
+                    f.write(f"{code:<10} {name:<14} {quantity:>8,.0f} {ti:>12} ")
+                    f.write(f"¥{market_value:>10,.2f} {profit_sign}¥{profit_loss:>7,.2f} ")
+                    f.write(f"{profit_pct_sign}{profit_loss_pct:>6.2f}% {seven_day_yield:>10}\n")
 
             # 配置分析
             f.write("\n📈 配置分析\n")
@@ -272,9 +313,13 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
         return False
 
     try:
-        # ── 资产明细行 ──
+        mmf_mask = df_portfolio.get('AssetType', pd.Series(dtype=str)) == '货币基金'
+        df_normal = df_portfolio[~mmf_mask]
+        df_mmf = df_portfolio[mmf_mask]
+
+        # ── 资产明细行（排除货币基金）──
         asset_rows = []
-        for _, row in df_portfolio.iterrows():
+        for _, row in df_normal.iterrows():
             pl = row.get('ProfitLoss', 0)
             pl_pct = row.get('ProfitLossPct', 0)
             is_cash = row.get('AssetCategory', '') == '现金'
@@ -298,6 +343,30 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
             <td>¥{row.get('MarketValue', 0):,.2f}</td>
             <td class="{cls}">{pl_display}</td>
             <td class="{cls}">{pl_pct_display}</td>
+          </tr>""")
+
+        # ── 货币基金行 ──
+        mmf_rows = []
+        for _, row in df_mmf.iterrows():
+            pl = row.get('ProfitLoss', 0)
+            pl_pct = row.get('ProfitLossPct', 0)
+            cls = 'profit' if pl >= 0 else 'loss'
+            sign = '+' if pl >= 0 else ''
+            try:
+                ti_display = f"¥{float(row.get('TotalInvestment', 0)):,.2f}"
+            except (TypeError, ValueError):
+                ti_display = '—'
+            seven_day = row.get('SevenDayYield', '—') or '—'
+            mmf_rows.append(f"""
+          <tr>
+            <td class="code">{row.get('Code', '')}</td>
+            <td>{row.get('Name', '未知')}</td>
+            <td>{row.get('Quantity', 0):,.0f}</td>
+            <td>{ti_display}</td>
+            <td>¥{row.get('MarketValue', 0):,.2f}</td>
+            <td class="{cls}">{sign}¥{pl:,.2f}</td>
+            <td class="{cls}">{sign}{pl_pct:.2f}%</td>
+            <td>{seven_day}</td>
           </tr>""")
 
         # ── 配置分析行 ──
@@ -355,6 +424,7 @@ def save_html_report(df_portfolio, analysis, summary, warnings, output_file):
             .replace('{{PROFIT_LOSS_CLASS}}',  pl_cls)
             .replace('{{PROFIT_SIGN}}',        pl_sign)
             .replace('{{ASSET_TABLE_ROWS}}',   '\n'.join(asset_rows))
+            .replace('{{MMF_TABLE_ROWS}}',     '\n'.join(mmf_rows))
             .replace('{{ALLOCATION_ROWS}}',    '\n'.join(alloc_rows))
             .replace('{{WARNINGS_HTML}}',      warnings_html)
             .replace('{{WARNING_COUNT_BADGE}}', warning_badge)
